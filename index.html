@@ -5,7 +5,145 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>长沙旅游助手</title>
-    <link rel="stylesheet" href="styles.css">
+    <style>
+        body {
+            font-family: 'Helvetica Neue', Arial, sans-serif;
+            background: #f7f7f7;
+            margin: 0;
+            padding: 20px;
+            color: #333;
+        }
+
+        h1 {
+            text-align: center;
+            color: #e74c3c;
+            margin-bottom: 30px;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: #fff;
+            border-radius: 8px;
+            padding: 30px;
+            box-shadow: 0 2px 15px rgba(0, 0, 0, 0.1);
+        }
+
+        select,
+        button {
+            padding: 12px 15px;
+            margin: 10px 5px 20px 0;
+            font-size: 16px;
+            border-radius: 6px;
+            border: 1px solid #ddd;
+        }
+
+        button {
+            background-color: #e67e22;
+            border: none;
+            color: white;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+
+        button:hover {
+            background-color: #d35400;
+        }
+
+        button:disabled {
+            background-color: #bdc3c7;
+            cursor: not-allowed;
+        }
+
+        button.secondary {
+            background-color: #3498db;
+        }
+
+        button.secondary:hover {
+            background-color: #2980b9;
+        }
+
+        button.tertiary {
+            background-color: #2ecc71;
+        }
+
+        button.tertiary:hover {
+            background-color: #27ae60;
+        }
+
+        .plan-day {
+            margin-bottom: 30px;
+            padding: 20px;
+            background: #f9f9f9;
+            border-radius: 6px;
+        }
+
+        .time-slot {
+            margin-bottom: 15px;
+        }
+
+        .attraction-card {
+            display: inline-block;
+            width: 200px;
+            margin: 10px;
+            padding: 15px;
+            background: white;
+            border-radius: 6px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+
+        .attraction-card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+        }
+
+        .attraction-card.selected {
+            background: #e8f4fc;
+            border: 2px solid #3498db;
+        }
+
+        .attraction-card h4 {
+            margin-top: 0;
+            color: #e74c3c;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        #planDisplay {
+            margin-top: 30px;
+        }
+
+        .plan-item {
+            margin-bottom: 15px;
+            padding-bottom: 15px;
+            border-bottom: 1px dashed #ddd;
+        }
+
+        .navigation {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 20px;
+        }
+
+        .loading {
+            opacity: 0.6;
+        }
+
+        @media (max-width: 600px) {
+            .container {
+                padding: 15px;
+            }
+
+            .attraction-card {
+                width: 100%;
+                margin: 10px 0;
+            }
+        }
+    </style>
 </head>
 
 <body>
@@ -26,7 +164,6 @@
         <!-- 第二步：规划每天行程 -->
         <div id="step2" class="hidden">
             <h2 id="currentDayTitle">第1天行程规划</h2>
-            <div id="selectedInfo" class="selected-info"></div> <!-- 新增：已选景点提示 -->
             <div id="dayPlans"></div>
             <div class="navigation">
                 <button id="prevDayBtn" class="secondary hidden" onclick="prevDay()">← 上一天</button>
@@ -40,17 +177,463 @@
             <div id="planDisplay"></div>
             <div class="navigation">
                 <button class="secondary" onclick="backToPlanning()">返回修改</button>
-                <button onclick="location.reload()">🔄 重新开始</button>
-                <button id="downloadBtn" onclick="downloadPDF()" disabled>📄 下载 PDF 行程单</button>
+                <button id="downloadBtn" onclick="downloadPDF()">📄 下载 PDF 行程单</button>
             </div>
         </div>
     </div>
 
-    <script src="data.js"></script>
-    <script src="utils.js"></script>
-    <script src="ui.js"></script> <!-- 此文件将含 updateSelectedInfo() 等逻辑 -->
-    <script src="pdf.js"></script>
-    <script src="app.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script>
+        // 完整长沙景点数据
+        const changshaData = {
+            morning: [
+                {
+                    name: "岳麓山",
+                    description: "长沙标志性景点，海拔300米，包含岳麓书院、爱晚亭等古迹",
+                    food: "【附近美食】帅哥烧饼(麓山南路)、向群锅饺(登高路)"
+                },
+                {
+                    name: "橘子洲头",
+                    description: "湘江中的带状岛屿，毛泽东青年艺术雕塑所在地，周末有烟花表演",
+                    food: "【江景餐厅】老长沙龙虾馆、湘江大码头(渔人码头店)"
+                },
+                {
+                    name: "湖南省博物馆",
+                    description: "国家一级博物馆，马王堆汉墓陈列非常震撼，需提前预约",
+                    food: "【步行5分钟】博物馆食堂：毛氏红烧肉、剁椒鱼头"
+                },
+                {
+                    name: "天心阁",
+                    description: "长沙古城墙遗址，明代建筑，可俯瞰长沙老城区",
+                    food: "【附近美食】杨裕兴面馆(百年老店)、双燕楼馄饨"
+                }
+            ],
+            noon: [
+                {
+                    name: "太平老街",
+                    description: "长沙保存最完整的历史老街，青石板路和民国建筑",
+                    food: "【必吃小吃】黑色经典臭豆腐、邵福记梅菜扣肉饼"
+                },
+                {
+                    name: "坡子街",
+                    description: "千年古街，火宫殿总店所在地，民俗表演丰富",
+                    food: "【老字号】火宫殿(红烧肉、姊妹团子)、新华楼(削面)"
+                },
+                {
+                    name: "超级文和友",
+                    description: "复古长沙生活场景，7层楼的空间还原1980年代市井文化",
+                    food: "【招牌菜】文和友龙虾、猪油拌饭、紫苏桃子姜"
+                },
+                {
+                    name: "都正街",
+                    description: "小众文艺街区，保留明清建筑风格，人流量较少",
+                    food: "【特色餐厅】盟重烧烤、客串出品(明星打卡店)"
+                }
+            ],
+            evening: [
+                {
+                    name: "五一广场",
+                    description: "长沙市中心地标，IFS国金中心7楼网红雕塑打卡点",
+                    food: "【网红餐厅】炊烟时代(小炒黄牛肉)、一盏灯(湘菜)"
+                },
+                {
+                    name: "黄兴路步行街",
+                    description: "中国十大步行街之一，3D立体大屏和街头表演",
+                    food: "【夜宵】四娭毑口味虾、伍厚德堂(民国公馆菜)"
+                },
+                {
+                    name: "解放西路酒吧街",
+                    description: "长沙夜生活中心，有众多livehouse和清吧",
+                    food: "【酒吧小吃】COMMUNE(自选餐吧)、酒狸花园(烧烤)"
+                },
+                {
+                    name: "湘江风光带",
+                    description: "沿江景观长廊，适合散步欣赏长沙夜景",
+                    food: "【江边餐厅】老长沙龙虾馆、湘江36号私房菜"
+                }
+            ]
+        };
+
+        let selectedDays = 1;
+        let currentDay = 1;
+        let selectedPlans = [];
+
+        // 开始规划
+        function startPlanning() {
+            selectedDays = parseInt(document.getElementById("daySelect").value);
+            selectedPlans = Array(selectedDays).fill().map(() => ({
+                morning: null,
+                noon: null,
+                evening: null
+            }));
+
+            document.getElementById("step1").classList.add("hidden");
+            document.getElementById("step2").classList.remove("hidden");
+            updateDayTitle();
+            renderDayPlan(currentDay);
+            updateNavigationButtons();
+        }
+
+        // 更新导航按钮状态
+        function updateNavigationButtons() {
+            const prevBtn = document.getElementById("prevDayBtn");
+            const nextBtn = document.getElementById("nextDayBtn");
+
+            prevBtn.classList.toggle("hidden", currentDay === 1);
+
+            if (currentDay === selectedDays) {
+                nextBtn.textContent = "完成规划 →";
+                nextBtn.onclick = showFinalPlan;
+            } else {
+                nextBtn.textContent = "下一日 →";
+                nextBtn.onclick = nextDay;
+            }
+        }
+
+        // 更新当前天数标题
+        function updateDayTitle() {
+            document.getElementById("currentDayTitle").textContent = `第${currentDay}天行程规划`;
+        }
+
+        // 上一天
+        function prevDay() {
+            if (currentDay > 1) {
+                currentDay--;
+                updateDayTitle();
+                renderDayPlan(currentDay);
+                updateNavigationButtons();
+            }
+        }
+
+        // 下一天
+        function nextDay() {
+            if (currentDay < selectedDays) {
+                currentDay++;
+                updateDayTitle();
+                renderDayPlan(currentDay);
+                updateNavigationButtons();
+            }
+        }
+
+        // 渲染某天的规划界面
+        function renderDayPlan(day) {
+            const planDiv = document.getElementById("dayPlans");
+            planDiv.innerHTML = "";
+
+            const dayIndex = day - 1;
+
+            // 上午选择
+            const morningDiv = document.createElement("div");
+            morningDiv.className = "time-slot";
+            morningDiv.innerHTML = `<h3>🌅 上午行程</h3>`;
+            changshaData.morning.forEach(attraction => {
+                const card = createAttractionCard(attraction, "morning", dayIndex);
+                morningDiv.appendChild(card);
+            });
+            planDiv.appendChild(morningDiv);
+
+            // 中午选择
+            const noonDiv = document.createElement("div");
+            noonDiv.className = "time-slot";
+            noonDiv.innerHTML = `<h3>🍽️ 中午行程</h3>`;
+            changshaData.noon.forEach(attraction => {
+                const card = createAttractionCard(attraction, "noon", dayIndex);
+                noonDiv.appendChild(card);
+            });
+            planDiv.appendChild(noonDiv);
+
+            // 晚上选择
+            const eveningDiv = document.createElement("div");
+            eveningDiv.className = "time-slot";
+            eveningDiv.innerHTML = `<h3>🌃 晚上行程</h3>`;
+            changshaData.evening.forEach(attraction => {
+                const card = createAttractionCard(attraction, "evening", dayIndex);
+                eveningDiv.appendChild(card);
+            });
+            planDiv.appendChild(eveningDiv);
+
+            // 显示当前选择
+            const currentDiv = document.createElement("div");
+            currentDiv.innerHTML = `
+                <h3>当前选择</h3>
+                <p>上午: ${selectedPlans[dayIndex].morning ? selectedPlans[dayIndex].morning.name : "未选择"}</p>
+                <p>中午: ${selectedPlans[dayIndex].noon ? selectedPlans[dayIndex].noon.name : "未选择"}</p>
+                <p>晚上: ${selectedPlans[dayIndex].evening ? selectedPlans[dayIndex].evening.name : "未选择"}</p>
+            `;
+            planDiv.appendChild(currentDiv);
+        }
+
+        // 创建景点卡片
+        function createAttractionCard(attraction, timeSlot, dayIndex) {
+            const card = document.createElement("div");
+            card.className = "attraction-card";
+            if (selectedPlans[dayIndex][timeSlot] && selectedPlans[dayIndex][timeSlot].name === attraction.name) {
+                card.classList.add("selected");
+            }
+
+            card.innerHTML = `
+                <h4>${attraction.name}</h4>
+                <p>${attraction.description}</p>
+                <p><small>${attraction.food}</small></p>
+            `;
+
+            card.onclick = () => {
+                selectedPlans[dayIndex][timeSlot] = attraction;
+                renderDayPlan(currentDay);
+            };
+
+            return card;
+        }
+
+        // 显示最终行程
+        function showFinalPlan() {
+            document.getElementById("step2").classList.add("hidden");
+            document.getElementById("step3").classList.remove("hidden");
+
+            const planDiv = document.getElementById("planDisplay");
+            planDiv.innerHTML = "";
+
+            selectedPlans.forEach((dayPlan, index) => {
+                const dayDiv = document.createElement("div");
+                dayDiv.className = "plan-day";
+                dayDiv.innerHTML = `
+                    <h3>📅 第 ${index + 1} 天</h3>
+                    <div class="plan-item">
+                        <h4>🌅 上午: ${dayPlan.morning ? dayPlan.morning.name : "未安排"}</h4>
+                        <p>${dayPlan.morning ? dayPlan.morning.description : ""}</p>
+                        <p><em>${dayPlan.morning ? dayPlan.morning.food : ""}</em></p>
+                    </div>
+                    <div class="plan-item">
+                        <h4>🍽️ 中午: ${dayPlan.noon ? dayPlan.noon.name : "未安排"}</h4>
+                        <p>${dayPlan.noon ? dayPlan.noon.description : ""}</p>
+                        <p><em>${dayPlan.noon ? dayPlan.noon.food : ""}</em></p>
+                    </div>
+                    <div class="plan-item">
+                        <h4>🌃 晚上: ${dayPlan.evening ? dayPlan.evening.name : "未安排"}</h4>
+                        <p>${dayPlan.evening ? dayPlan.evening.description : ""}</p>
+                        <p><em>${dayPlan.evening ? dayPlan.evening.food : ""}</em></p>
+                    </div>
+                    <hr/>
+                `;
+                planDiv.appendChild(dayDiv);
+            });
+        }
+
+        // 返回修改行程
+        function backToPlanning() {
+            document.getElementById("step3").classList.add("hidden");
+            document.getElementById("step2").classList.remove("hidden");
+            updateDayTitle();
+            renderDayPlan(currentDay);
+            updateNavigationButtons();
+        }
+
+        // 文本换行处理函数
+        function splitTextToLines(doc, text, maxWidth) {
+            const words = text.split('');
+            const lines = [];
+            let currentLine = '';
+
+            for (let word of words) {
+                const testLine = currentLine + word;
+                const testWidth = doc.getTextWidth(testLine);
+
+                if (testWidth > maxWidth && currentLine.length > 0) {
+                    lines.push(currentLine);
+                    currentLine = word;
+                } else {
+                    currentLine = testLine;
+                }
+            }
+
+            if (currentLine.length > 0) {
+                lines.push(currentLine);
+            }
+
+            return lines;
+        }
+
+        // 下载PDF - 修复中文支持版本
+        function downloadPDF() {
+            try {
+                const downloadBtn = document.getElementById('downloadBtn');
+
+                // 禁用按钮，显示加载状态
+                downloadBtn.disabled = true;
+                downloadBtn.textContent = '正在生成PDF...';
+                downloadBtn.classList.add('loading');
+
+                // 创建一个HTML字符串用于打印
+                let htmlContent = `
+                    <html>
+                    <head>
+                        <meta charset="UTF-8">
+                        <title>长沙旅游行程</title>
+                        <style>
+                            body { 
+                                font-family: 'Microsoft YaHei', SimHei, sans-serif; 
+                                margin: 20px; 
+                                line-height: 1.6;
+                                color: #333;
+                            }
+                            h1 { 
+                                color: #e74c3c; 
+                                text-align: center; 
+                                border-bottom: 2px solid #e74c3c;
+                                padding-bottom: 10px;
+                            }
+                            h2 { 
+                                color: #e74c3c; 
+                                margin-top: 30px;
+                                border-left: 4px solid #e74c3c;
+                                padding-left: 10px;
+                            }
+                            h3 { 
+                                color: #2c3e50; 
+                                margin-top: 20px;
+                            }
+                            .day-section { 
+                                margin-bottom: 30px; 
+                                page-break-inside: avoid;
+                            }
+                            .time-section { 
+                                margin-bottom: 15px; 
+                                padding: 10px;
+                                background-color: #f8f9fa;
+                                border-radius: 5px;
+                            }
+                            .attraction-name { 
+                                font-weight: bold; 
+                                color: #e74c3c;
+                                font-size: 14px;
+                            }
+                            .description { 
+                                margin: 5px 0; 
+                                color: #555;
+                            }
+                            .food-info { 
+                                font-style: italic; 
+                                color: #666;
+                                font-size: 12px;
+                            }
+                            .meta-info {
+                                text-align: center;
+                                color: #666;
+                                font-size: 12px;
+                                margin-bottom: 30px;
+                            }
+                            .footer {
+                                text-align: center;
+                                margin-top: 50px;
+                                padding-top: 20px;
+                                border-top: 1px solid #ddd;
+                                color: #999;
+                                font-size: 10px;
+                            }
+                            @media print {
+                                body { margin: 15px; }
+                                .day-section { page-break-after: auto; }
+                            }
+                        </style>
+                    </head>
+                    <body>
+                        <h1>🌶️ 长沙旅游行程计划</h1>
+                        <div class="meta-info">
+                            行程天数：${selectedDays}天 | 生成时间：${new Date().toLocaleString('zh-CN')}
+                        </div>
+                `;
+
+                selectedPlans.forEach((dayPlan, index) => {
+                    htmlContent += `<div class="day-section">`;
+                    htmlContent += `<h2>📅 第 ${index + 1} 天</h2>`;
+
+                    // 上午行程
+                    if (dayPlan.morning) {
+                        htmlContent += `
+                            <div class="time-section">
+                                <h3>🌅 上午</h3>
+                                <div class="attraction-name">${dayPlan.morning.name}</div>
+                                <div class="description">${dayPlan.morning.description}</div>
+                                <div class="food-info">${dayPlan.morning.food}</div>
+                            </div>
+                        `;
+                    }
+
+                    // 中午行程
+                    if (dayPlan.noon) {
+                        htmlContent += `
+                            <div class="time-section">
+                                <h3>🍽️ 中午</h3>
+                                <div class="attraction-name">${dayPlan.noon.name}</div>
+                                <div class="description">${dayPlan.noon.description}</div>
+                                <div class="food-info">${dayPlan.noon.food}</div>
+                            </div>
+                        `;
+                    }
+
+                    // 晚上行程
+                    if (dayPlan.evening) {
+                        htmlContent += `
+                            <div class="time-section">
+                                <h3>🌃 晚上</h3>
+                                <div class="attraction-name">${dayPlan.evening.name}</div>
+                                <div class="description">${dayPlan.evening.description}</div>
+                                <div class="food-info">${dayPlan.evening.food}</div>
+                            </div>
+                        `;
+                    }
+
+                    htmlContent += `</div>`;
+                });
+
+                htmlContent += `
+                        <div class="footer">
+                            Created by 长沙旅游助手 | 祝您旅途愉快！
+                        </div>
+                    </body>
+                    </html>
+                `;
+
+                // 创建新窗口并打印
+                const printWindow = window.open('', '_blank');
+                printWindow.document.write(htmlContent);
+                printWindow.document.close();
+
+                // 等待内容加载完成后自动打印
+                printWindow.onload = function () {
+                    printWindow.print();
+                    // 打印对话框关闭后关闭窗口
+                    printWindow.onafterprint = function () {
+                        printWindow.close();
+                    };
+                };
+
+                // 恢复按钮状态
+                setTimeout(() => {
+                    downloadBtn.disabled = false;
+                    downloadBtn.textContent = '📄 下载 PDF 行程单';
+                    downloadBtn.classList.remove('loading');
+                }, 1000);
+
+            } catch (error) {
+                console.error('PDF生成失败:', error);
+                alert('PDF生成失败，请重试');
+
+                // 恢复按钮状态
+                const downloadBtn = document.getElementById('downloadBtn');
+                downloadBtn.disabled = false;
+                downloadBtn.textContent = '📄 下载 PDF 行程单';
+                downloadBtn.classList.remove('loading');
+            }
+        }
+
+        // 重置规划器
+        function resetPlanner() {
+            document.getElementById("step3").classList.add("hidden");
+            document.getElementById("step1").classList.remove("hidden");
+            currentDay = 1;
+        }
+    </script>
 </body>
 
 </html>
